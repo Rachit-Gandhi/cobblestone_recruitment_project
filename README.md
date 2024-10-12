@@ -1,5 +1,5 @@
 # Wind Speed Anomaly Detection
-
+<img src="Screenshot.png">
 This project implements a real-time wind speed anomaly detection system using machine learning and adaptive algorithms. It provides a web-based interface for visualizing wind speed data and detecting anomalies as they occur.
 
 ## Table of Contents
