@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wind Speed Anomaly Detection</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        #startButton, #spikeButton, #noiseSlider {
+            font-size: 18px;
+            padding: 10px 20px;
+            margin: 20px 10px 20px 0;
+        }
+        #debugInfo {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .slider-container label {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-time Wind Speed Anomaly Detection</h1>
+    <button id="startButton">Start Simulation</button>
+    <button id="spikeButton">Introduce Spike</button>
+    <div class="slider-container">
+        <label for="noiseSlider">Noise Level:</label>
+        <input type="range" id="noiseSlider" min="0" max="5" step="0.1" value="0.5">
+        <span id="noiseValue">0.5</span>
+    </div>
+    <div id="chart"></div>
+    <div id="debugInfo"></div>
+
+    <script>
+        const socket = io();
+        let globalChart = null;
+        let dataPoints = 0;
+
+        function updateDebugInfo(message) {
+            const debugInfo = document.getElementById('debugInfo');
+            debugInfo.innerHTML += message + '<br>';
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+        }
+
+        function initializeChart() {
+            updateDebugInfo('Initializing chart...');
+            const layout = {
+                title: 'Real-time Wind Speed Anomaly Detection',
+                xaxis: { title: 'Time', type: 'date' },
+                yaxis: { title: 'Wind Speed (scaled)' },
+                height: 600
+            };
+            const data = [
+                { x: [], y: [], type: 'scatter', mode: 'lines', name: 'Actual' },
+                { x: [], y: [], type: 'scatter', mode: 'lines', name: 'Forecast', line: { dash: 'dash' } },
+                { x: [], y: [], type: 'scatter', mode: 'markers', name: 'Anomaly', marker: { color: 'red', size: 10 } }
+            ];
+            Plotly.newPlot('chart', data, layout).then(gd => {
+                globalChart = gd;
+                updateDebugInfo('Chart initialized.');
+            }).catch(error => {
+                console.error('Error initializing chart:', error);
+                updateDebugInfo('Error initializing chart: ' + error.message);
+            });
+        }
+
+        // Initialize the chart on page load
+        initializeChart();
+
+        // Start button click handler
+        document.getElementById('startButton').addEventListener('click', function() {
+            updateDebugInfo('Starting simulation...');
+            const noiseLevel = document.getElementById('noiseSlider').value;
+            fetch(`/start_simulation?noise_level=${noiseLevel}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.status);
+                    updateDebugInfo('Simulation started: ' + data.status);
+                })
+                .catch(error => {
+                    console.error('Error starting simulation:', error);
+                    updateDebugInfo('Error starting simulation: ' + error.message);
+                });
+            this.disabled = true;
+            this.textContent = 'Simulation Running';
+        });
+
+        // Spike button click handler
+        document.getElementById('spikeButton').addEventListener('click', function() {
+            socket.emit('introduce_spike');
+            updateDebugInfo('Spike introduced');
+        });
+
+        // Noise slider handler
+        const noiseSlider = document.getElementById('noiseSlider');
+        const noiseValue = document.getElementById('noiseValue');
+        noiseSlider.addEventListener('input', function() {
+            noiseValue.textContent = this.value;
+            socket.emit('update_noise_level', { noise_level: parseFloat(this.value) });
+        });
+
+        // Update the chart when new data arrives
+        socket.on('new_data_point', function(data) {
+            console.log('Received data:', data);  // Log received data
+            updateDebugInfo('Received data point: ' + JSON.stringify(data));
+            dataPoints++;
+            
+            if (!globalChart) {
+                updateDebugInfo('Chart not initialized. Attempting to reinitialize...');
+                initializeChart();
+                return;
+            }
+
+            try {
+                Plotly.extendTraces(globalChart, {
+                    x: [[data.time], [data.time]],
+                    y: [[data.actual], [data.forecast]]
+                }, [0, 1]);
+
+                if (data.is_anomaly) {
+                    Plotly.addTraces(globalChart, {
+                        x: [data.time],
+                        y: [data.actual],
+                        mode: 'markers',
+                        marker: {color: 'red', size: 10},
+                        showlegend: false
+                    });
+                }
+
+                // Keep only the last 100 points visible
+                if (globalChart.data[0].x.length > 100) {
+                    var update = {
+                        xaxis: {
+                            range: [globalChart.data[0].x[globalChart.data[0].x.length - 100], globalChart.data[0].x[globalChart.data[0].x.length - 1]]
+                        }
+                    };
+                    Plotly.relayout(globalChart, update);
+                }
+                updateDebugInfo('Chart updated. Total data points: ' + dataPoints);
+            } catch (error) {
+                console.error('Error updating chart:', error);
+                updateDebugInfo('Error updating chart: ' + error.message);
+            }
+        });
+
+        // Log connection status
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            updateDebugInfo('Connected to server');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            updateDebugInfo('Disconnected from server');
+        });
+    </script>
+</body>
+</html>
