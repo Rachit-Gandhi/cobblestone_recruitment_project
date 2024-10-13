@@ -18,7 +18,7 @@ This application uses a combination of LSTM (Long Short-Term Memory) neural netw
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/wind-speed-anomaly-detection.git
+   git clone https://github.com/Rachit-Gandhi/cobblestone_recruitment_project.git
    cd wind-speed-anomaly-detection
    ```
 
